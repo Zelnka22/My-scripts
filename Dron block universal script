@@ -326,6 +326,21 @@ RunService.RenderStepped:Connect(function()
         end
     end
 end)
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
 
-movePanel.Visible = false
+humanoid.Died:Connect(function()
+    if block then
+        block:Destroy()
+        block = nil
+    end
+    restoreCamera()
+    enableCharacterControls()
+    controlling = false
+    movePanel.Visible = false
+    resetMoveFlags()
+    mode = 1
+    updateModeText()
+end)
+movePanel.Visible = true
 updateModeText()
