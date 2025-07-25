@@ -1,0 +1,331 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local camera = workspace.CurrentCamera
+
+local ui = Instance.new("ScreenGui")
+ui.Name = "BlockUI"
+ui.Parent = playerGui
+
+local creditLabel = Instance.new("TextLabel")
+creditLabel.Size = UDim2.new(1, 0, 0, 30)
+creditLabel.Position = UDim2.new(0, 0, 0, 0)
+creditLabel.BackgroundTransparency = 1
+creditLabel.TextColor3 = Color3.new(1, 1, 1)
+creditLabel.Font = Enum.Font.SourceSansBold
+creditLabel.TextSize = 20
+creditLabel.Text = "by Zelnka22"
+creditLabel.Parent = ui
+
+local createBlockButton = Instance.new("TextButton")
+createBlockButton.Size = UDim2.new(0, 150, 0, 50)
+createBlockButton.Position = UDim2.new(0, 20, 0, 40)
+createBlockButton.Text = "Create Block"
+createBlockButton.Parent = ui
+
+local toggleModeButton = Instance.new("TextLabel")
+toggleModeButton.Size = UDim2.new(0, 150, 0, 50)
+toggleModeButton.Position = UDim2.new(0, 20, 0, 100)
+toggleModeButton.Text = "Mode: Block Drone"
+toggleModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+toggleModeButton.TextColor3 = Color3.new(1,1,1)
+toggleModeButton.Font = Enum.Font.SourceSansBold
+toggleModeButton.TextSize = 24
+toggleModeButton.TextStrokeTransparency = 0.7
+toggleModeButton.BorderSizePixel = 0
+toggleModeButton.Parent = ui
+
+local modeButtonsFrame = Instance.new("Frame")
+modeButtonsFrame.Size = UDim2.new(0, 150, 0, 60)
+modeButtonsFrame.Position = UDim2.new(0, 20, 0, 160)
+modeButtonsFrame.BackgroundTransparency = 1
+modeButtonsFrame.Parent = ui
+
+local modeButtons = {}
+for i = 1, 3 do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 40, 0, 50)
+    btn.Position = UDim2.new(0, (i-1)*50, 0, 0)
+    btn.Text = tostring(i)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 24
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    btn.BackgroundTransparency = 0.25
+    btn.Name = "Mode"..i
+    btn.Parent = modeButtonsFrame
+    modeButtons[i] = btn
+end
+
+local movePanel = Instance.new("Frame")
+movePanel.Size = UDim2.new(0, 200, 0, 320)
+movePanel.Position = UDim2.new(1, -220, 0.5, -160)
+movePanel.BackgroundTransparency = 0.5
+movePanel.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+movePanel.Parent = ui
+
+local directions = {
+    {name="up", text="↑", pos=UDim2.new(0.5, -25, 0, 10)},
+    {name="left", text="←", pos=UDim2.new(0, 10, 0, 65)},
+    {name="down", text="↓", pos=UDim2.new(0.5, -25, 0, 120)},
+    {name="right", text="→", pos=UDim2.new(1, -60, 0, 65)},
+    {name="swap", text="⇄", pos=UDim2.new(0.5, -25, 0, 175)},
+    {name="elevate", text="⮝", pos=UDim2.new(1, -60, 0, 10)},
+    {name="descend", text="⮟", pos=UDim2.new(1, -60, 0, 120)},
+}
+
+local moveButtons = {}
+for _, dir in ipairs(directions) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 50, 0, 50)
+    btn.Position = dir.pos
+    btn.Text = dir.text
+    btn.Name = dir.name
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    btn.BackgroundTransparency = 0.25
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 32
+    btn.Parent = movePanel
+    moveButtons[dir.name] = btn
+end
+
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(0, 190, 0, 30)
+speedLabel.Position = UDim2.new(0, 5, 0, 240)
+speedLabel.BackgroundTransparency = 0.5
+speedLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+speedLabel.TextColor3 = Color3.new(1, 1, 1)
+speedLabel.Font = Enum.Font.SourceSansBold
+speedLabel.TextSize = 18
+speedLabel.Text = "Speed: 16"
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.Parent = movePanel
+
+local speedInput = Instance.new("TextBox")
+speedInput.Size = UDim2.new(0, 190, 0, 30)
+speedInput.Position = UDim2.new(0, 5, 0, 275)
+speedInput.BackgroundTransparency = 0.5
+speedInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+speedInput.TextColor3 = Color3.new(1, 1, 1)
+speedInput.Font = Enum.Font.SourceSans
+speedInput.TextSize = 18
+speedInput.Text = "16"
+speedInput.ClearTextOnFocus = false
+speedInput.Parent = movePanel
+
+local block = nil
+local mode = 2 -- 1: Static, 2: Block Drone, 3: Holding Drone
+local controlling = false
+
+local moveFlags = {
+    up = false, down = false, left = false, right = false,
+    swap = false, elevate = false, descend = false
+}
+
+local SPEED = 16
+local VERT_SPEED = 16
+
+local function resetMoveFlags()
+    for k in pairs(moveFlags) do moveFlags[k] = false end
+end
+
+local function createBlock()
+    if block then
+        block:Destroy()
+        block = nil
+    end
+
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    block = Instance.new("Part")
+    block.Size = Vector3.new(2, 2, 2)
+    block.Anchored = false
+    block.CanCollide = false
+    block.Transparency = 0.3
+    block.BrickColor = BrickColor.new("Bright red")
+    block.Name = "LocalBlock"
+    block.Position = hrp.Position + hrp.CFrame.LookVector * 5
+    block.Parent = workspace
+
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bv.Velocity = Vector3.new()
+    bv.Parent = block
+
+    local bg = Instance.new("BodyGyro")
+    bg.MaxTorque = Vector3.new(4e4, 4e4, 4e4)
+    bg.D = 200
+    bg.CFrame = CFrame.new(block.Position)
+    bg.Parent = block
+
+    controlling = false
+end
+
+local function setCameraToBlock()
+    if block then
+        camera.CameraType = Enum.CameraType.Custom
+        camera.CameraSubject = block
+    end
+end
+
+local function restoreCamera()
+    camera.CameraType = Enum.CameraType.Custom
+    local character = player.Character
+    if character and character:FindFirstChild("Humanoid") then
+        camera.CameraSubject = character.Humanoid
+    end
+end
+
+local function disableCharacterControls()
+    local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = 0
+        humanoid.JumpPower = 0
+    end
+end
+
+local function enableCharacterControls()
+    local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = 16
+        humanoid.JumpPower = 50
+    end
+end
+
+local function moveCharacterUnderBlock()
+    local character = player.Character
+    if character and block then
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local blockPos = block.Position
+            local currentY = hrp.Orientation.Y
+            hrp.CFrame = CFrame.new(blockPos.X, blockPos.Y - 3, blockPos.Z) * CFrame.Angles(0, math.rad(currentY), 0)
+        end
+    end
+end
+
+local function handleBlockControl()
+    if block and controlling then
+        local bv = block:FindFirstChildOfClass("BodyVelocity")
+        local bg = block:FindFirstChildOfClass("BodyGyro")
+        local moveVec = Vector3.new()
+        if moveFlags.up then moveVec = moveVec + block.CFrame.LookVector end
+        if moveFlags.down then moveVec = moveVec - block.CFrame.LookVector end
+        if moveFlags.left then moveVec = moveVec - block.CFrame.RightVector end
+        if moveFlags.right then moveVec = moveVec + block.CFrame.RightVector end
+        if moveFlags.elevate then moveVec = moveVec + Vector3.new(0,1,0) * VERT_SPEED end
+        if moveFlags.descend then moveVec = moveVec - Vector3.new(0,1,0) * VERT_SPEED end
+
+        local planar = Vector3.new(moveVec.X, 0, moveVec.Z)
+        if planar.Magnitude > 0 then planar = planar.Unit else planar = Vector3.new() end
+        moveVec = planar * SPEED + Vector3.new(0, moveVec.Y, 0)
+
+        if bv then bv.Velocity = moveVec end
+        if bg then
+            local _, y = camera.CFrame:ToEulerAnglesYXZ()
+            bg.CFrame = CFrame.new(block.Position) * CFrame.Angles(0, y, 0)
+        end
+    end
+end
+
+for dir, btn in pairs(moveButtons) do
+    btn.MouseButton1Down:Connect(function()
+        moveFlags[dir] = true
+        if dir == "swap" and (mode == 1 or mode == 2) then
+            if block and player.Character then
+                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local blockPos = block.Position
+                    local playerPos = hrp.Position
+                    local blockOri = block.Orientation
+                    local playerOri = hrp.Orientation
+                    block.CFrame = CFrame.new(playerPos) * CFrame.Angles(0, math.rad(playerOri.Y), 0)
+                    hrp.CFrame = CFrame.new(blockPos) * CFrame.Angles(0, math.rad(blockOri.Y), 0)
+                end
+            end
+            moveFlags[dir] = false
+        end
+    end)
+    btn.MouseButton1Up:Connect(function()
+        moveFlags[dir] = false
+    end)
+    btn.TouchLongPress:Connect(function(_, state)
+        moveFlags[dir] = (state == Enum.UserInputState.Begin)
+    end)
+end
+
+speedInput.FocusLost:Connect(function(enterPressed)
+    local num = tonumber(speedInput.Text)
+    if num and num > 0 then
+        SPEED = num
+        VERT_SPEED = num
+        speedLabel.Text = "Speed: " .. tostring(num)
+    else
+        speedInput.Text = tostring(SPEED)
+    end
+end)
+
+createBlockButton.MouseButton1Click:Connect(function()
+    createBlock()
+end)
+
+local function updateModeText()
+    if mode == 1 then
+        toggleModeButton.Text = "Mode: Static"
+    elseif mode == 2 then
+        toggleModeButton.Text = "Mode: Block Drone"
+    elseif mode == 3 then
+        toggleModeButton.Text = "Mode: Holding Drone"
+    end
+end
+
+for i, btn in pairs(modeButtons) do
+    btn.MouseButton1Click:Connect(function()
+        if not block then return end
+        mode = i
+
+        if mode == 1 then
+            controlling = false
+            movePanel.Visible = false
+            restoreCamera()
+            enableCharacterControls()
+            resetMoveFlags()
+            moveButtons.swap.Visible = true
+        elseif mode == 2 then
+            controlling = true
+            movePanel.Visible = true
+            setCameraToBlock()
+            disableCharacterControls()
+            resetMoveFlags()
+            moveButtons.swap.Visible = true
+        elseif mode == 3 then
+            controlling = true
+            movePanel.Visible = true
+            setCameraToBlock()
+            disableCharacterControls()
+            resetMoveFlags()
+            moveButtons.swap.Visible = false
+        end
+
+        updateModeText()
+    end)
+end
+
+RunService.RenderStepped:Connect(function()
+    if block then
+        if mode == 3 then
+            moveCharacterUnderBlock()
+        end
+        if controlling then
+            handleBlockControl()
+            setCameraToBlock()
+        end
+    end
+end)
+
+movePanel.Visible = false
+updateModeText()
