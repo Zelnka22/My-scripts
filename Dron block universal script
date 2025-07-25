@@ -342,5 +342,5 @@ humanoid.Died:Connect(function()
     mode = 1
     updateModeText()
 end)
-movePanel.Visible = true
+movePanel.Visible = false
 updateModeText()
